@@ -1,0 +1,36 @@
+﻿Fix chest randomizer
+Shuffle skill trees between monsters
+fix checks // Fixed maybe
+don't make all enemies in champion battle a champion  // Fixed maybe
+shockhopper(?)
+Shifting broken
+don't randomize raw hide
+
+
+Randomize dark and light shifts // done
+Randomize Ultimates // done
+
+Fix weakness/strength being the same sometimes
+
+Assign only 2 skills for non familiars // done
+Pick tier 2 skill if no tier one skills available // done
+
+
+AI skills go down skill tree // done
+
+Skills based on level / 3 // done
+
+
+
+
+AI skill randomization when monster spawns.
+Pick floored(level / 3) skills based on skill points from their skill tree(?)
+
+champions that have minions break the game
+
+Improve monster stats to support skill tree
+
+Add missing eggs and evo items to monster drop pool.
+
+
+Randomize actives and passives

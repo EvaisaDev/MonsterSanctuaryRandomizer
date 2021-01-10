@@ -1,0 +1,1477 @@
+﻿using BepInEx;
+using BepInEx.Configuration;
+using BepInEx.Logging;
+using HarmonyLib;
+using MonoMod.Cil;
+using MonoMod.RuntimeDetour;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
+using UnityEngine;
+using Debug = UnityEngine.Debug;
+using Object = UnityEngine.Object;
+using Random = System.Random;
+
+namespace MonsterSanctuaryRandomizer
+{
+    [BepInPlugin(ModGUID, ModName, ModVersion)]
+    public class MonsterRandomizer : BaseUnityPlugin
+    {
+        public const string ModGUID = "evaisa.monsterrandomizer";
+        public const string ModName = "Monster Randomizer";
+        public const string ModVersion = "0.1.9";
+
+        public static ConfigEntry<bool> randomizeMonsters;
+        public static ConfigEntry<bool> randomizeChampions;
+        public static ConfigEntry<bool> addChampionsToRegularPool;
+        public static ConfigEntry<bool> randomizeChests;
+        public static ConfigEntry<bool> randomizeSkillTrees;
+        public static ConfigEntry<bool> randomizeUltimates;
+        public static ConfigEntry<bool> randomizeShifts;
+
+
+        public static ConfigEntry<bool> shiftPairs;
+        //  public static ConfigEntry<bool> randomizeResistanceWeakness;
+        //  public static ConfigEntry<bool> randomizeUltimates;
+        // public static ConfigEntry<bool> randomizeShifts;
+
+        public static ConfigEntry<bool> skipCutscenes;
+        // public Harmony harmony = null;
+
+        public static Dictionary<string, Monster> championDict;
+
+        public static bool initial_spawn = true;
+
+        public static List<SkillTree> skill_trees = new List<SkillTree>();
+
+        public static List<GameObject> ultimates = new List<GameObject>();
+        public static List<GameObject> light_shift_attacks = new List<GameObject>();
+        public static List<GameObject> dark_shift_attacks = new List<GameObject>();
+        public static List<GameObject> weaknesses = new List<GameObject>();
+        public static List<GameObject> resistances = new List<GameObject>();
+        public static List<GameObject> champion_skills = new List<GameObject>();
+
+        /*
+        public static Dictionary<string, List<SkillTree>> skillDictionary = new Dictionary<string, List<SkillTree>>();
+        public static Dictionary<string, List<GameObject>> ultimateDictionary = new Dictionary<string, List<GameObject>>();
+        public static Dictionary<string, List<GameObject>> AIDictionary = new Dictionary<string, List<GameObject>>();
+        public static Dictionary<string, GameObject> lightDictionary = new Dictionary<string, GameObject>();
+        public static Dictionary<string, GameObject> darkDictionary = new Dictionary<string, GameObject>();
+        public static Dictionary<string, GameObject> weaknessDictionary = new Dictionary<string, GameObject>();
+        public static Dictionary<string, GameObject> resistanceDictionary = new Dictionary<string, GameObject>();
+        */
+
+        /*
+        public static List<Monster> regularMonsters = new List<Monster>();
+        public static List<Monster> championMonsters = new List<Monster>();
+        */
+
+        public static Dictionary<string, List<GameObject>> referenceables = new Dictionary<string, List<GameObject>>();
+
+        public static Random rand;
+        //public static List<GameObject> lootItems;
+
+        void Awake()
+        {
+            randomizeMonsters = Config.Bind("General", "RandomizeMonsters", true, "Randomize monsters that spawn in the world.");
+            randomizeChampions = Config.Bind("General", "RandomizeChampions", true, "Randomize champions that spawn in the world.");
+            addChampionsToRegularPool = Config.Bind("General", "ChampionsInRegularPool", true, "Add champion monsters to the regular spawn pool.");
+            randomizeChests = Config.Bind("General", "RandomizeChests", true, "Randomize the contents of chests.");
+            randomizeSkillTrees = Config.Bind("General", "RandomizeSkillTrees", true, "Randomize skill trees of monsters.");
+            //shiftPairs = Config.Bind("General", "ShiftPairs", false, "Keep the shift skills in the same set. (if this is false the dark and light shift skills are unrelated to eachother)");
+            randomizeUltimates = Config.Bind("General", "RandomizeUltimates", true, "Randomize the ultimates of monsters.");
+            randomizeShifts = Config.Bind("General", "RandomizeShifts", true, "Randomize the light/dark shifts of monsters.");
+            //randomizeResistanceWeakness = Config.Bind("General", "RandomizeResistanceWeakness", true, "Randomize resistances and weaknesses of monsters.");
+
+
+            skipCutscenes = Config.Bind("General", "SkipCutscenes", false, "Automatically skip cutscenes.");
+
+            Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
+
+            championDict = new Dictionary<string, Monster>();
+
+
+            /*
+            lootItems = new List<GameObject>();
+
+            var reward_box1 = (GameObject)Instantiate(Resources.Load("RewardBoxLvl1"), Vector3.zero, Quaternion.identity);
+            var reward_box2 = (GameObject)Instantiate(Resources.Load("RewardBoxLvl2"), Vector3.zero, Quaternion.identity);
+            var reward_box3 = (GameObject)Instantiate(Resources.Load("RewardBoxLvl3"), Vector3.zero, Quaternion.identity);
+            var reward_box4 = (GameObject)Instantiate(Resources.Load("RewardBoxLvl4"), Vector3.zero, Quaternion.identity);
+            var reward_box5 = (GameObject)Instantiate(Resources.Load("RewardBoxLvl5"), Vector3.zero, Quaternion.identity);
+
+            reward_box1.GetComponent<LootBox>().Loot.ForEach(loot =>
+            {
+                lootItems.Add(loot);
+            });
+            reward_box2.GetComponent<LootBox>().Loot.ForEach(loot =>
+            {
+                lootItems.Add(loot);
+            });
+            reward_box3.GetComponent<LootBox>().Loot.ForEach(loot =>
+            {
+                lootItems.Add(loot);
+            });
+            reward_box4.GetComponent<LootBox>().Loot.ForEach(loot =>
+            {
+                lootItems.Add(loot);
+            });
+            reward_box5.GetComponent<LootBox>().Loot.ForEach(loot =>
+            {
+                lootItems.Add(loot);
+            });*/
+            /*
+            Destroy(reward_box1);
+            Destroy(reward_box2);
+            Destroy(reward_box3);
+            Destroy(reward_box4);
+            Destroy(reward_box5);
+            */
+            // Harmony.CreateAndPatchAll(typeof(MonsterRandomizer));
+            // UnityEngine.Debug.Log("Hello, world!");
+        }
+
+
+        public ManualLogSource GetLogger()
+        {
+            return Logger;
+        }
+
+
+        /*
+        [HarmonyPatch(typeof(WorldData), "GetMapDataBySceneName")]
+        [HarmonyPrefix]
+        public MapData GetMapDataBySceneName_routed(WorldData instance)
+        {
+            UnityEngine.Debug.Log("How the heck is this running?");
+            foreach (MapData mapData in instance.Maps)
+            {
+                return mapData;
+            }
+            return null;
+        }
+        */
+
+        public static int stringToNumber(string inputString)
+        {
+            var charArray = inputString.ToCharArray();
+
+            int seed = 0;
+
+            charArray.ToList().ForEach(character =>
+            {
+                seed = seed + Convert.ToByte(character);
+            });
+
+            
+
+            return seed;
+        }
+
+        public static int skewedRandom(bool side, int min, int max)
+        {
+            float unif = (float)MonsterRandomizer.rand.NextDouble();
+
+            float beta = (float)Math.Pow(Math.Sin(unif * Math.PI / 2f), 2f);
+
+            if (side)
+            {
+                beta = (beta < 0.5f) ? 2 * beta : 2 * (1 - beta);
+            }
+            else
+            {
+                beta = (beta > 0.5f) ? 2 * beta - 1 : 2 * (1 - beta) - 1;
+            }
+
+            return (int)Math.Floor(beta * (max - min + 1)) + min;
+        }
+
+
+        public static T CopyComponent<T>(T original, GameObject destination) where T : Component
+        {
+            System.Type type = original.GetType();
+            Component copy = destination.AddComponent(type);
+            System.Reflection.FieldInfo[] fields = type.GetFields();
+            foreach (System.Reflection.FieldInfo field in fields)
+            {
+                field.SetValue(copy, field.GetValue(original));
+            }
+            return copy as T;
+        }
+
+        public static T duplicateType<T>(T original) where T : Component
+        {
+            System.Type type = original.GetType();
+            Component copy = (T)Activator.CreateInstance(type);
+            System.Reflection.FieldInfo[] fields = type.GetFields();
+            foreach (System.Reflection.FieldInfo field in fields)
+            {
+                field.SetValue(copy, field.GetValue(original));
+            }
+            return copy as T;
+        }
+
+        public static GameObject pickNewObject(List<GameObject> possible_picks, List<GameObject> existing_picks)
+        {
+            if (!possible_picks.Any())
+            {
+                return null;
+            }
+            var picked_gameobject = possible_picks[MonsterRandomizer.rand.Next(0, possible_picks.Count)];
+
+            if (existing_picks.Contains(picked_gameobject))
+            {
+                return pickNewObject(possible_picks, existing_picks);
+            }
+
+            return picked_gameobject;
+        }
+
+        public static void handleSkillTrees(GameObject monster_object)
+        {
+            if (monster_object.GetComponent<SkillTree>() != null)
+            {
+
+                monster_object.GetComponents<SkillTree>().ToList().ForEach(skilltree =>
+                {
+                    Object.DestroyImmediate(skilltree);
+                });
+
+              //  Debug.Log("Random number 2: " + MonsterRandomizer.rand.Next(0, 100000));
+
+                var skill_count = MonsterRandomizer.rand.Next(3, 5);
+
+                var skill_manager = monster_object.GetComponent<SkillManager>();
+
+                skill_manager.BaseSkills = new List<GameObject>();
+                for (int i = 0; i < skill_count; i++)
+                {
+
+                    var skill_tree = MonsterRandomizer.skill_trees[MonsterRandomizer.rand.Next(0, MonsterRandomizer.skill_trees.Count)];
+
+                    var skill_tree_comp = MonsterRandomizer.CopyComponent(skill_tree, monster_object);
+
+                    if (skill_tree.Tier1Skills.Any())
+                    {
+                        var skill = skill_tree.Tier1Skills[MonsterRandomizer.rand.Next(0, skill_tree.Tier1Skills.Count)];
+
+                        if (skill_manager.BaseSkills.Count <= 2)
+                        {
+                            skill_manager.BaseSkills.Add(skill);
+                        }
+                    }
+                    else if (skill_tree.Tier2Skills.Any())
+                    {
+                        var skill = skill_tree.Tier2Skills[MonsterRandomizer.rand.Next(0, skill_tree.Tier2Skills.Count)];
+
+                        if (skill_manager.BaseSkills.Count <= 2)
+                        {
+                            skill_manager.BaseSkills.Add(skill);
+                        }
+                    }
+                }
+            }
+        }
+        public static void handleReferenceModifier()
+        {
+            rand = new Random(MonsterRandomizer.stringToNumber(PlayerController.Instance.name));
+            Debug.Log("Player name: " + PlayerController.Instance.name);
+            Debug.Log("Running randomizer with seed: " + MonsterRandomizer.stringToNumber(PlayerController.Instance.name));
+            Debug.Log("Random number: " + MonsterRandomizer.rand.Next(0, 100000));
+            if (MonsterRandomizer.initial_spawn)
+            {
+                // Loop through the list of referenceable objects
+                GameController.Instance.WorldData.Referenceables.ForEach(referenceable_class =>
+                {
+                    // Check if item is not null (If item exists)
+                    if (referenceable_class != null)
+                    {
+                        // Check if item is a GameObject, it should not be possible for this to not be true but safety first
+                        if (referenceable_class.gameObject != null)
+                        {
+                            // Get and assign GameObject to variable.
+                            var referenceable = referenceable_class.gameObject;
+
+                            // Check if object is a monster
+                            if (referenceable.GetComponent<Monster>())
+                            {
+
+                                // Skill tree collection stuff
+                                if (referenceable.GetComponent<SkillTree>() != null)
+                                {
+                                    referenceable.GetComponents<SkillTree>().ToList().ForEach(skilltree =>
+                                    {
+                                        //  Debug.Log("Found a skill tree, wooooo!");
+                                        MonsterRandomizer.skill_trees.Add(MonsterRandomizer.duplicateType(skilltree));
+                                    });
+                                }
+
+                                // Special skill collection stuff
+                                if (referenceable.GetComponent<SkillManager>() != null)
+                                {
+                                    referenceable.GetComponent<SkillManager>().Ultimates.ForEach(ultimate =>
+                                    {
+                                        MonsterRandomizer.ultimates.Add(ultimate);
+                                    });
+
+                                    referenceable.GetComponent<SkillManager>().ChampionSkills.ForEach(skill =>
+                                    {
+                                        MonsterRandomizer.champion_skills.Add(skill);
+                                    });
+
+
+                                    MonsterRandomizer.dark_shift_attacks.Add(referenceable.GetComponent<SkillManager>().DarkSkill);
+                                    MonsterRandomizer.light_shift_attacks.Add(referenceable.GetComponent<SkillManager>().LightSkill);
+
+                                    referenceable.GetComponent<SkillManager>().BaseSkills.ForEach(skill =>
+                                    {
+                                        if (skill.GetComponent<PassiveElementModifier>() != null)
+                                        {
+                                            if (skill.GetComponent<PassiveElementModifier>().Modifier > 0)
+                                            {
+                                                MonsterRandomizer.weaknesses.Add(skill);
+                                            }
+                                            else if (skill.GetComponent<PassiveElementModifier>().Modifier < 0)
+                                            {
+                                                MonsterRandomizer.resistances.Add(skill);
+                                            }
+                                        }
+
+                                    });
+                                }
+
+                                // Check if object is a champion or supports being a champion
+                                if (referenceable.GetComponent<SkillManager>().ChampionSkills.Any())
+                                {
+                                    // Check if object is a spectral familiar
+                                    if (referenceable.GetComponent<Monster>().IsSpectralFamiliar)
+                                    {
+                                        // If referenceables does not contain dictionary for spectral familiars, add it.
+                                        if (!MonsterRandomizer.referenceables.ContainsKey("familiars"))
+                                        {
+                                            MonsterRandomizer.referenceables.Add("familiars", new List<GameObject>());
+                                        }
+
+                                        // Add object to familiar dictionary
+                                        MonsterRandomizer.referenceables["familiars"].Add(referenceable);
+                                    }
+                                    else
+                                    {
+                                        // If referenceables does not contain dictionary for champions, add it.
+                                        if (!MonsterRandomizer.referenceables.ContainsKey("champions"))
+                                        {
+                                            MonsterRandomizer.referenceables.Add("champions", new List<GameObject>());
+                                        }
+
+                                        // Add object to champions dictionary.
+                                        MonsterRandomizer.referenceables["champions"].Add(referenceable);
+                                    }
+                                }
+                                else
+                                {
+                                    // If referenceables does not contain dictionary for regular monsters, add it.
+                                    if (!MonsterRandomizer.referenceables.ContainsKey("regular_monsters"))
+                                    {
+                                        MonsterRandomizer.referenceables.Add("regular_monsters", new List<GameObject>());
+                                    }
+
+                                    // Add object to regular monster dictionary
+                                    MonsterRandomizer.referenceables["regular_monsters"].Add(referenceable);
+                                }
+
+
+                            }
+                        }
+                    }
+                });
+                MonsterRandomizer.initial_spawn = false;
+            }
+
+            if (MonsterRandomizer.randomizeUltimates.Value)
+            {
+                if (MonsterRandomizer.referenceables.ContainsKey("regular_monsters"))
+                {
+                    MonsterRandomizer.referenceables["regular_monsters"].ForEach(monster_object =>
+                    {
+                        var skill_manager = monster_object.GetComponent<SkillManager>();
+                        skill_manager.Ultimates = new List<GameObject>();
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            skill_manager.Ultimates.Add(MonsterRandomizer.pickNewObject(MonsterRandomizer.ultimates, skill_manager.Ultimates));
+                        }
+                    });
+                }
+                if (MonsterRandomizer.referenceables.ContainsKey("champions"))
+                {
+                    MonsterRandomizer.referenceables["champions"].ForEach(monster_object =>
+                    {
+                        var skill_manager = monster_object.GetComponent<SkillManager>();
+                        skill_manager.Ultimates = new List<GameObject>();
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            skill_manager.Ultimates.Add(MonsterRandomizer.pickNewObject(MonsterRandomizer.ultimates, skill_manager.Ultimates));
+                        }
+                    });
+                }
+                if (MonsterRandomizer.referenceables.ContainsKey("familiars"))
+                {
+                    MonsterRandomizer.referenceables["familiars"].ForEach(monster_object =>
+                    {
+                        var skill_manager = monster_object.GetComponent<SkillManager>();
+                        skill_manager.Ultimates = new List<GameObject>();
+
+                        for (int i = 0; i < 3; i++)
+                        {
+                            skill_manager.Ultimates.Add(MonsterRandomizer.pickNewObject(MonsterRandomizer.ultimates, skill_manager.Ultimates));
+                        }
+                    });
+                }
+            }
+
+            if (MonsterRandomizer.randomizeSkillTrees.Value)
+            {
+                if (MonsterRandomizer.referenceables.ContainsKey("regular_monsters"))
+                {
+                    Debug.Log("Regular monsters have been found!");
+                    MonsterRandomizer.referenceables["regular_monsters"].ForEach(monster_object =>
+                    {
+
+                        handleSkillTrees(monster_object);
+
+                    });
+                }
+                if (MonsterRandomizer.referenceables.ContainsKey("champions"))
+                {
+                    Debug.Log("Champions have been found!");
+                    MonsterRandomizer.referenceables["champions"].ForEach(monster_object =>
+                    {
+                        handleSkillTrees(monster_object);
+
+                    });
+                }
+                if (MonsterRandomizer.referenceables.ContainsKey("familiars"))
+                {
+                    Debug.Log("Familiars have been found!");
+                    MonsterRandomizer.referenceables["familiars"].ForEach(monster_object =>
+                    {
+
+                        handleSkillTrees(monster_object);
+
+                    });
+                }
+            }
+        }
+    }
+
+    /*
+    [HarmonyPatch(typeof(CheatMenu), nameof(CheatMenu.Start), MethodType.Normal)]
+    public class cheatTest
+    {
+        [HarmonyPostfix]
+        static void PostFix(CheatMenu __instance)
+        {
+            __instance.gameObject.SetActive(true);
+        }
+    }
+    */
+
+    [HarmonyPatch(typeof(BaseCutscene), nameof(BaseCutscene.Update), MethodType.Normal)]
+    public class skipCutscenes
+    {
+        [HarmonyPrefix]
+        static void PreFix(BaseCutscene __instance)
+        {
+            if (MonsterRandomizer.skipCutscenes.Value)
+            {
+               // if (__instance.CanBeSkipped())
+              //  {
+                   // if (__instance.bIsSkipPromptActive)
+                  //  {
+                        __instance.RequestSkip();
+                   // }
+               // }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Chest), nameof(Chest.Start), MethodType.Normal)]
+    public class chestSwitcheroo
+    {
+        [HarmonyPostfix]
+        static void PreFix(Chest __instance)
+        {
+            var lootboxes = Resources.FindObjectsOfTypeAll<LootBox>();
+
+            var loot_options_1 = new List<GameObject>();
+            var loot_options_2 = new List<GameObject>();
+            var loot_options_3 = new List<GameObject>();
+            var loot_options_4 = new List<GameObject>();
+            var loot_options_5 = new List<GameObject>();
+
+
+            GameController.Instance.WorldData.Referenceables.ForEach(referenceable =>
+            {
+
+
+                if(referenceable != null){
+                    if (referenceable.gameObject != null)
+                    {
+
+                        var loot = referenceable.gameObject;
+                        if (loot.GetComponent<Equipment>() != null || loot.GetComponent<Food>() != null)
+                        {
+
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && loot.name != "WoodenStick" && !loot_options_1.Any(item => item.name == loot.name))
+                            {
+                                loot_options_1.Add(loot);
+                                loot_options_2.Add(loot);
+                                loot_options_3.Add(loot);
+                            }
+
+                        }
+
+
+                    }
+                }
+            });
+ 
+
+            lootboxes.ToList().ForEach(lootbox =>
+            {
+                if (lootbox.gameObject.name == "RewardBoxLvl1")
+                {
+                    lootbox.Loot.ForEach(loot =>
+                    {
+                        if (loot.GetComponent<Egg>() != null)
+                        {
+                            if (MonsterRandomizer.rand.Next(0, 100) <= 5)
+                            {
+                                loot_options_1.Add(loot);
+                            }
+                        }
+                        else
+                        {
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && !loot_options_1.Any(item => item.name == loot.name))
+                            {
+                                loot_options_1.Add(loot);
+                            }
+                        }
+                    });
+                }
+                else if (lootbox.gameObject.name == "RewardBoxLvl2")
+                {
+                    lootbox.Loot.ForEach(loot =>
+                    {
+                        if (loot.GetComponent<Egg>() != null)
+                        {
+                            if (MonsterRandomizer.rand.Next(0, 100) <= 5)
+                            {
+                                loot_options_2.Add(loot);
+                            }
+                        }
+                        else
+                        {
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && !loot_options_2.Any(item => item.name == loot.name))
+                            {
+                                loot_options_2.Add(loot);
+                            }
+                        }
+                    });
+                }
+                else if (lootbox.gameObject.name == "RewardBoxLvl3")
+                {
+                    lootbox.Loot.ForEach(loot =>
+                    {
+                        if (loot.GetComponent<Egg>() != null)
+                        {
+                            if (MonsterRandomizer.rand.Next(0, 100) <= 5)
+                            {
+                                loot_options_3.Add(loot);
+                            }
+                        }
+                        else
+                        {
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && !loot_options_3.Any(item => item.name == loot.name))
+                            {
+                                loot_options_3.Add(loot);
+                            }
+                        }
+                    });
+                }
+                else if (lootbox.gameObject.name == "RewardBoxLvl4")
+                {
+                    lootbox.Loot.ForEach(loot =>
+                    {
+                        if (loot.GetComponent<Egg>() != null)
+                        {
+                            if (MonsterRandomizer.rand.Next(0, 100) <= 5)
+                            {
+                                loot_options_4.Add(loot);
+                            }
+                        }
+                        else
+                        {
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && !loot_options_4.Any(item => item.name == loot.name))
+                            {
+                                loot_options_4.Add(loot);
+                            }
+                        }
+                    });
+                }
+                else if (lootbox.gameObject.name == "RewardBoxLvl5")
+                {
+                    lootbox.Loot.ForEach(loot =>
+                    {
+                        if (loot.GetComponent<Egg>() != null)
+                        {
+                            if (MonsterRandomizer.rand.Next(0, 100) <= 5)
+                            {
+                                loot_options_5.Add(loot);
+                            }
+                        }
+                        else
+                        {
+                            if (!loot.name.Contains("+1") && !loot.name.Contains("+2") && !loot.name.Contains("+3") && !loot.name.Contains("+4") && !loot.name.Contains("+5") && !loot_options_5.Any(item => item.name == loot.name))
+                            {
+                                loot_options_5.Add(loot);
+                            }
+                        }
+                    });
+                }
+            });
+
+            //GameController.Instance.WorldData.Referenceables.
+
+            if (MonsterRandomizer.randomizeChests.Value)
+            {
+                if (__instance.Item != null && __instance.Item.GetComponent<UniqueItem>() == null && __instance.Item.GetComponent<KeyItem>() == null)
+                {
+                    //Debug.Log("Found chest containing: " + __instance.Item.name);
+
+                    var random_number = MonsterRandomizer.rand.Next(0, 100);
+                    if (random_number < 5)
+                    {
+                        __instance.Item = loot_options_5[MonsterRandomizer.rand.Next(0, loot_options_5.Count)];
+                    }
+                    else if (random_number < 15)
+                    {
+                        __instance.Item = loot_options_4[MonsterRandomizer.rand.Next(0, loot_options_4.Count)];
+                    }
+                    else if (random_number < 30)
+                    {
+                        __instance.Item = loot_options_3[MonsterRandomizer.rand.Next(0, loot_options_3.Count)];
+                    }
+                    else if (random_number < 50)
+                    {
+                        __instance.Item = loot_options_2[MonsterRandomizer.rand.Next(0, loot_options_2.Count)];
+                    }
+                    else if (random_number <= 100)
+                    {
+                        __instance.Item = loot_options_1[MonsterRandomizer.rand.Next(0, loot_options_1.Count)];
+                    }
+
+                    //Debug.Log("Randomized chest item into: " + __instance.Item.name);
+                }
+
+                if (MonsterRandomizer.rand.Next(0, 100) < 5 && __instance.Item != null && __instance.Item.GetComponent<UniqueItem>() == null && __instance.Item.GetComponent<KeyItem>() == null || __instance.Item == null)
+                {
+                    __instance.Item = null;
+
+                    __instance.Gold = MonsterRandomizer.skewedRandom(false, 1, 20) * 100;
+                }
+
+                var new_random = MonsterRandomizer.rand.Next(0, 100);
+
+                if (__instance.Item != null && __instance.Item.GetComponent<UniqueItem>() == null && __instance.Item.GetComponent<KeyItem>() == null)
+                {
+
+                    if (new_random < 5)
+                    {
+                        __instance.Quantity = 3;
+                    }
+                    else if (new_random < 20)
+                    {
+                        __instance.Quantity = 2;
+                    }
+                    else if (new_random <= 100)
+                    {
+                        __instance.Quantity = 1;
+                    }
+
+                }
+
+            }
+
+
+
+            /*
+               reward_box_1.GetComponent<LootBox>().Loot.ForEach(loot =>
+               {
+                   loot_options.Add(loot);
+               });
+
+               reward_box_2.GetComponent<LootBox>().Loot.ForEach(loot =>
+               {
+                   loot_options.Add(loot);
+               });
+
+               reward_box_3.GetComponent<LootBox>().Loot.ForEach(loot =>
+               {
+                   loot_options.Add(loot);
+               });
+
+               reward_box_4.GetComponent<LootBox>().Loot.ForEach(loot =>
+               {
+                   loot_options.Add(loot);
+               });
+
+               reward_box_5.GetComponent<LootBox>().Loot.ForEach(loot =>
+               {
+                   loot_options.Add(loot);
+               });
+            
+               if (MonsterRandomizer.randomizeChests.Value)
+               {
+                   if (__instance.Item != null && __instance.Item.GetComponent<UniqueItem>() == null && __instance.Item.GetComponent<KeyItem>() == null)
+                   {
+                       Debug.Log("Found chest containing: " + __instance.Item.name);
+                       __instance.Item = loot_options[MonsterRandomizer.rand.Next(0, loot_options.Count)];
+                       Debug.Log("Randomized chest item into: " + __instance.Item.name);
+                   }
+               }*/
+            Debug.Log(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(ProgressManager), nameof(ProgressManager.ChampionKilled), MethodType.Normal)]
+    public class FixProgress
+    {
+        [HarmonyPrefix]
+        static void PreFix(ProgressManager __instance, ref Monster champion, int score, int points)
+        {
+            Monster champion_new;
+            var old_champion = champion;
+            Debug.Log("Beat champion: " + old_champion.OriginalMonsterName);
+            if (MonsterRandomizer.championDict.ContainsKey(old_champion.OriginalMonsterName))
+            {
+                champion_new = MonsterRandomizer.championDict[old_champion.OriginalMonsterName];
+                Debug.Log("Well then: " + champion_new.OriginalMonsterName);
+                champion = champion_new;
+            }
+
+            
+        }
+
+        [HarmonyPostfix]
+        static void PostFix(ProgressManager __instance, ref Monster champion, int score, int points)
+        {
+            Debug.Log("Replaced with champion: " + champion.OriginalMonsterName);
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerController), nameof(PlayerController.LoadGame), MethodType.Normal)]
+    public class loadGameFix
+    {
+        [HarmonyPrefix]
+        static void PreFix(PlayerController __instance, ref SaveGameData saveGameData)
+        {
+            __instance.name = saveGameData.PlayerName;
+
+            MonsterRandomizer.handleReferenceModifier();
+        }
+    }
+
+    [HarmonyPatch(typeof(GameController), nameof(GameController.InitPlayerStartSetup), MethodType.Normal)]
+    public class extendGameController
+    {
+        [HarmonyPrefix]
+        static void PreFix(GameController __instance)
+        {
+            MonsterRandomizer.handleReferenceModifier();
+
+        }
+    }
+
+    [HarmonyPatch(typeof(MonsterEncounter), nameof(MonsterEncounter.DetermineEnemy), MethodType.Normal)]
+    public class enemySwitcheroo
+    {
+        [HarmonyPostfix]
+        static void PostFix(MonsterEncounter __instance, ref MonsterEncounter.EncounterConfig __result)
+        {
+           /* 
+            if (!MonsterRandomizer.initial_spawn)
+            {
+
+
+
+                MonsterRandomizer.initial_spawn = true;
+            }
+           */
+        }
+    }
+
+
+            /*
+            [HarmonyPatch(typeof(MonsterEncounter), nameof(MonsterEncounter.DetermineEnemy), MethodType.Normal)]
+            public class enemySwitcheroo
+            {
+                [HarmonyPostfix]
+                static void PostFix(MonsterEncounter __instance, ref MonsterEncounter.EncounterConfig __result)
+                {
+
+                    List<Monster> champion_monsters_2 = new List<Monster>();
+                    List<GameObject> champion_monsters = new List<GameObject>();
+                    List<Monster> regular_monsters_2 = new List<Monster>();
+                    List<GameObject> regular_monsters = new List<GameObject>();
+                    List<Monster> champion_monsters_used_2 = new List<Monster>();
+                    List<GameObject> champion_monsters_used = new List<GameObject>();
+                    List<Monster> regular_monsters_used_2 = new List<Monster>();
+                    List<GameObject> regular_monsters_used = new List<GameObject>();
+
+
+                    var possible_skills = new List<List<GameObject>>();
+
+
+                    if (MonsterRandomizer.initial_spawn == false && MonsterRandomizer.randomizeSkillTrees.Value)
+                    {
+                        Random.InitState(MonsterRandomizer.stringToNumber(PlayerController.Instance.PlayerName));
+
+                        GameController.Instance.WorldData.Referenceables.ForEach(referenceable =>
+                        {
+
+
+                            if (referenceable != null)
+                            {
+
+                                if (referenceable.gameObject != null)
+                                {
+
+                                    var monster_object = referenceable.gameObject;
+
+                                    if (monster_object.GetComponent<Monster>() != null)
+                                    {
+                                        var monster = monster_object.GetComponent<Monster>();
+
+                                        if (monster_object.GetComponent<SkillTree>() != null)
+                                        {
+                                            monster_object.GetComponents<SkillTree>().ToList().ForEach(skilltree =>
+                                            {
+                                                MonsterRandomizer.skill_trees.Add(MonsterRandomizer.duplicateType(skilltree));
+                                            });
+                                        }
+
+                                    }
+
+                                }
+                            }
+                        });
+
+
+                        GameController.Instance.WorldData.Referenceables.ForEach(referenceable =>
+                        {
+
+
+                            if (referenceable != null)
+                            {
+
+                                if (referenceable.gameObject != null)
+                                {
+
+                                    var monster_object = referenceable.gameObject;
+
+                                    if (monster_object.GetComponent<Monster>() != null)
+                                    {
+                                        var monster = monster_object.GetComponent<Monster>();
+
+                                        if (monster_object.GetComponent <SkillManager>() != null)
+                                        {
+                                            monster_object.GetComponent<SkillManager>().Ultimates.ForEach(ultimate =>
+                                            {
+                                                MonsterRandomizer.ultimates.Add(ultimate);
+                                            });
+
+                                            MonsterRandomizer.dark_shift_attacks.Add(monster_object.GetComponent<SkillManager>().DarkSkill);
+                                            MonsterRandomizer.light_shift_attacks.Add(monster_object.GetComponent<SkillManager>().LightSkill);
+
+                                            monster_object.GetComponent<SkillManager>().BaseSkills.ForEach(skill =>
+                                            {
+                                                if (skill.GetComponent<PassiveElementModifier>() != null)
+                                                {
+                                                    if (skill.GetComponent<PassiveElementModifier>().Modifier > 0)
+                                                    {
+                                                        MonsterRandomizer.weaknesses.Add(skill);
+                                                    }
+                                                    else if (skill.GetComponent<PassiveElementModifier>().Modifier < 0)
+                                                    {
+                                                        MonsterRandomizer.resistances.Add(skill);
+                                                    }
+                                                }
+
+                                            });
+                                        }
+
+                                    }
+
+                                }
+                            }
+                        });
+
+                        GameController.Instance.WorldData.Referenceables.ForEach(referenceable =>
+                        {
+
+
+                            if (referenceable != null)
+                            {
+
+                                if (referenceable.gameObject != null)
+                                {
+
+                                    var monster_object = referenceable.gameObject;
+
+                                    if (monster_object.GetComponent<Monster>() != null)
+                                    {
+                                        var monster = monster_object.GetComponent<Monster>();
+
+                                        if (monster_object.GetComponent<SkillTree>() != null)
+                                        {
+
+                                            monster_object.GetComponents<SkillTree>().ToList().ForEach(skilltree =>
+                                            {
+                                                //skilltree.Tier1Skills.
+                                                Object.Destroy(skilltree);
+                                            });
+
+
+                                            var skill_manager = monster_object.GetComponent<SkillManager>();
+
+
+                                            var old_weaknesses = new List<GameObject>();
+                                            var old_resistances = new List<GameObject>();
+
+                                            skill_manager.BaseSkills.ForEach(skill =>
+                                            {
+                                                if(skill.GetComponent<PassiveElementModifier>() != null)
+                                                {
+                                                    if (skill.GetComponent<PassiveElementModifier>().Modifier > 0)
+                                                    {
+                                                        old_weaknesses.Add(skill);
+                                                    }
+                                                    else if (skill.GetComponent<PassiveElementModifier>().Modifier < 0)
+                                                    {
+                                                        old_resistances.Add(skill);
+                                                    }
+                                                }
+                                            });
+
+                                            skill_manager.BaseSkills = new List<GameObject>();
+                                            skill_manager.AISkills = new List<GameObject>();
+                                            skill_manager.AdvancedAISkills = new List<GameObject>();
+                                            skill_manager.Ultimates = new List<GameObject>();
+
+                                            if(MonsterRandomizer.shiftPairs.Value == false)
+                                            {
+                                                int n = MonsterRandomizer.light_shift_attacks.Count;
+                                                while (n > 1)
+                                                {
+                                                    n--;
+                                                    int k = MonsterRandomizer.rand.Next(0, n + 1);
+                                                    var value = MonsterRandomizer.light_shift_attacks[k];
+                                                    MonsterRandomizer.light_shift_attacks[k] = MonsterRandomizer.light_shift_attacks[n];
+                                                    MonsterRandomizer.light_shift_attacks[n] = value;
+                                                }
+
+                                                n = MonsterRandomizer.dark_shift_attacks.Count;
+                                                while (n > 1)
+                                                {
+                                                    n--;
+                                                    int k = MonsterRandomizer.rand.Next(0, n + 1);
+                                                    var value = MonsterRandomizer.dark_shift_attacks[k];
+                                                    MonsterRandomizer.dark_shift_attacks[k] = MonsterRandomizer.dark_shift_attacks[n];
+                                                    MonsterRandomizer.dark_shift_attacks[n] = value;
+                                                }
+                                            }
+
+                                            var light_skill = MonsterRandomizer.light_shift_attacks[MonsterRandomizer.rand.Next(0, MonsterRandomizer.light_shift_attacks.Count)];
+                                            var dark_skill = MonsterRandomizer.dark_shift_attacks[MonsterRandomizer.rand.Next(0, MonsterRandomizer.dark_shift_attacks.Count)];
+
+                                            MonsterRandomizer.lightDictionary.Add(monster_object.name, light_skill);
+                                            MonsterRandomizer.darkDictionary.Add(monster_object.name, dark_skill);
+
+                                            skill_manager.LightSkill = light_skill;
+                                            skill_manager.DarkSkill = dark_skill;
+
+                                            MonsterRandomizer.ultimateDictionary.Add(monster_object.name, new List<GameObject>());
+
+                                            var resistance = MonsterRandomizer.resistances[MonsterRandomizer.rand.Next(0, MonsterRandomizer.resistances.Count)];
+
+
+                                            var filtered_weaknesses = new List<GameObject>();
+
+                                            MonsterRandomizer.weaknesses.ForEach(weakness_item =>
+                                            {
+                                                if(weakness_item.GetComponent<PassiveElementModifier>().Element != resistance.GetComponent<PassiveElementModifier>().Element)
+                                                {
+                                                    filtered_weaknesses.Add(weakness_item);
+                                                }
+                                            });
+
+                                            var weakness = filtered_weaknesses[MonsterRandomizer.rand.Next(0, filtered_weaknesses.Count)];
+
+                                            skill_manager.BaseSkills.Add(weakness);
+                                            skill_manager.BaseSkills.Add(resistance);
+
+                                            MonsterRandomizer.resistanceDictionary.Add(monster_object.name, resistance);
+                                            MonsterRandomizer.weaknessDictionary.Add(monster_object.name, weakness);
+
+                                            for (int i = 0; i < 3; i++)
+                                            {
+                                                var new_ultimate = MonsterRandomizer.ultimates[MonsterRandomizer.rand.Next(0, MonsterRandomizer.ultimates.Count)];
+                                                skill_manager.Ultimates.Add(new_ultimate);
+                                                MonsterRandomizer.ultimateDictionary[monster_object.name].Add(new_ultimate);
+                                            }
+
+                                            MonsterRandomizer.skillDictionary.Add(monster_object.name, new List<SkillTree>());
+
+                                            MonsterRandomizer.AIDictionary.Add(monster_object.name, new List<GameObject>());
+
+                                            var skill_count = MonsterRandomizer.rand.Next(3, 5);
+
+                                            var allow_skills = new List<GameObject>();
+
+                                            for (int i = 0; i < skill_count; i++)
+                                            {
+
+                                                var skill_tree = MonsterRandomizer.skill_trees[MonsterRandomizer.rand.Next(0, MonsterRandomizer.skill_trees.Count)];
+
+                                                if (skill_tree.Tier1Skills.Any())
+                                                {
+                                                    var skill = skill_tree.Tier1Skills[MonsterRandomizer.rand.Next(0, skill_tree.Tier1Skills.Count)];
+
+                                                    skill_manager.BaseSkills.Add(skill);
+                                                }
+
+
+
+                                                skill_tree.Tier2Skills.ForEach(skill =>
+                                                {
+                                                    allow_skills.Add(skill);
+                                                });
+
+                                                skill_tree.Tier3Skills.ForEach(skill =>
+                                                {
+                                                    allow_skills.Add(skill);
+                                                });
+
+                                                skill_tree.Tier4Skills.ForEach(skill =>
+                                                {
+                                                    allow_skills.Add(skill);
+                                                });
+
+                                                skill_tree.Tier5Skills.ForEach(skill =>
+                                                {
+                                                    allow_skills.Add(skill);
+                                                });
+
+                                                MonsterRandomizer.CopyComponent(skill_tree, monster_object);
+
+                                                MonsterRandomizer.skillDictionary[monster_object.name].Add(skill_tree);
+                                            }
+
+                                            var ai_attack_count = MonsterRandomizer.rand.Next(3, 10);
+
+                                            for (int index = 0; index < ai_attack_count; index++)
+                                            {
+                                                var new_skill = allow_skills[MonsterRandomizer.rand.Next(0, allow_skills.Count)];
+                                                if (!skill_manager.AISkills.Contains(new_skill))
+                                                {
+                                                    skill_manager.AISkills.Add(new_skill);
+                                                    MonsterRandomizer.AIDictionary[monster_object.name].Add(new_skill);
+                                                }
+                                            }
+                                        }
+
+                                    }
+
+                                }
+                            }
+                        });
+
+                        MonsterRandomizer.initial_spawn = true;
+                    }
+
+                    var dangerous_mons = new List<string>()
+                    {
+                        "Draconov",
+                        "Goblin Brute",
+                        "Goblin Warlock",
+                        "Goblin Pilot",
+                        "Goblin Hood",
+                        "Goblin Miner",
+                        "Mad Eye"
+                    };
+
+
+
+                    GameController.Instance.WorldData.Maps.ForEach(mapData =>
+                    {
+                        mapData.Encounters.ForEach(encounter =>
+                        {
+                            Random.InitState(MonsterRandomizer.stringToNumber(PlayerController.Instance.PlayerName + mapData.SceneName));
+                            if (encounter.EncounterType == EEncounterType.Champion || encounter.EncounterType == EEncounterType.ChampionChallenge)
+                            {
+                                encounter.Monsters.ForEach(monster =>
+                                {
+                                    //monster.gameObject.r
+
+                                    if (MonsterRandomizer.randomizeSkillTrees.Value)
+                                    {
+                                        monster.gameObject.GetComponents<SkillTree>().ToList().ForEach(skill =>
+                                        {
+                                            Object.Destroy(skill);
+                                        });
+
+
+                                        var skill_manager = monster.gameObject.GetComponent<SkillManager>();
+
+
+
+                                        skill_manager.BaseSkills = new List<GameObject>();
+                                        skill_manager.AISkills = new List<GameObject>();
+                                        skill_manager.AdvancedAISkills = new List<GameObject>();
+                                        skill_manager.Ultimates = new List<GameObject>();
+
+                                        skill_manager.LightSkill = MonsterRandomizer.lightDictionary[monster.gameObject.name];
+                                        skill_manager.DarkSkill = MonsterRandomizer.darkDictionary[monster.gameObject.name];
+
+                                        skill_manager.BaseSkills.Add(MonsterRandomizer.weaknessDictionary[monster.gameObject.name]);
+                                        skill_manager.BaseSkills.Add(MonsterRandomizer.resistanceDictionary[monster.gameObject.name]);
+
+                                        MonsterRandomizer.ultimateDictionary[monster.gameObject.name].ForEach(skill =>
+                                        {
+                                            skill_manager.Ultimates.Add(skill);
+                                        });
+
+                                        MonsterRandomizer.AIDictionary[monster.gameObject.name].ForEach(skill =>
+                                        {
+                                            skill_manager.AISkills.Add(skill);
+                                        });
+
+                                        MonsterRandomizer.skillDictionary[monster.gameObject.name].ForEach(skill_tree =>
+                                        {
+                                            MonsterRandomizer.CopyComponent(skill_tree, monster.gameObject);
+
+                                            if (skill_tree.Tier1Skills.Any())
+                                            {
+                                                var skill = skill_tree.Tier1Skills[MonsterRandomizer.rand.Next(0, skill_tree.Tier1Skills.Count)];
+
+                                                skill_manager.BaseSkills.Add(skill);
+                                            }
+                                        });
+
+
+
+                                    }
+                                    if (!regular_monsters.Contains(monster.gameObject) && MonsterRandomizer.addChampionsToRegularPool.Value && !monster.IsSpectralFamiliar)
+                                    {
+                                        regular_monsters.Add(monster.gameObject);
+                                        regular_monsters_2.Add(monster);
+                                    }
+
+
+                                    if (!champion_monsters.Contains(monster.gameObject) && !dangerous_mons.Contains(monster.OriginalMonsterName))
+                                    {
+                                        champion_monsters.Add(monster.gameObject);
+                                        champion_monsters_2.Add(monster);
+                                    }
+
+
+                                });
+                            }
+                            else
+                            {
+                                encounter.Monsters.ForEach(monster =>
+                                {
+
+
+                                    if (!regular_monsters.Contains(monster.gameObject))
+                                    {
+                                        regular_monsters.Add(monster.gameObject);
+                                        regular_monsters_2.Add(monster);
+                                    }
+
+
+                                });
+                            }
+                        });
+                    });
+
+                    var regular_monsters2 = new List<GameObject>();
+                    var champion_monsters2 = new List<GameObject>();
+                    var champion_monsters2_mon = new List<Monster>();
+
+                    var monster_count = __result.Monster.Length;
+
+
+
+                    var current_area = GameController.Instance.CurrentSceneName;
+
+                    GameController.Instance.WorldData.Maps.ForEach(mapData =>
+                    {
+                        mapData.Encounters.ForEach(encounter =>
+                        {
+
+                            Random.InitState(MonsterRandomizer.stringToNumber(PlayerController.Instance.PlayerName + mapData.SceneName));
+
+                            if (encounter.EncounterType == EEncounterType.Champion || encounter.EncounterType == EEncounterType.ChampionChallenge)
+                            {
+                                //Random.InitState(PlayerController.Instance.PlayerName.GetHashCode());
+                                encounter.Monsters.ForEach(monster =>
+                                {
+
+                                    if (!champion_monsters.Any())
+                                    {
+                                        champion_monsters_used.ForEach(mon =>
+                                        {
+                                            champion_monsters.Add(mon);
+                                        });
+                                        champion_monsters_used_2.ForEach(mon =>
+                                        {
+                                            champion_monsters_2.Add(mon);
+                                        });
+                                    }
+
+
+
+                                   // Debug.Log("mon_count = " + champion_monsters.Count);
+
+                                    int champion_id = MonsterRandomizer.rand.Next(0, champion_monsters.Count);
+
+                                    //Debug.Log("champion_id = " + champion_id);
+
+                                    monster = champion_monsters_2[champion_id];
+                                    if (mapData.SceneName == current_area)
+                                    {
+
+                                        champion_monsters2.Add(champion_monsters_2[champion_id].gameObject);
+                                        champion_monsters2_mon.Add(champion_monsters_2[champion_id]);
+                                    }
+
+                                    champion_monsters_used.Add(monster.gameObject);
+
+                                    champion_monsters.RemoveAt(champion_id);
+
+                                    champion_monsters_used_2.Add(monster);
+
+                                    champion_monsters_2.RemoveAt(champion_id);
+
+                                    //monster = champion_monsters[champion_id];
+
+                                    //champion_monsters_used.Add(monster);
+
+                                    //champion_monsters.RemoveAt(champion_id);
+                                });
+                            }
+                            else
+                            {
+                               // Random.InitState(PlayerController.Instance.PlayerName.GetHashCode() + mapData.SceneName.GetHashCode());
+                                encounter.Monsters.ForEach(monster =>
+                                {
+                                    if (!regular_monsters.Any())
+                                    {
+                                        regular_monsters_used.ForEach(mon =>
+                                        {
+                                            regular_monsters.Add(mon);
+                                        });
+                                        regular_monsters_used_2.ForEach(mon =>
+                                        {
+                                            regular_monsters_2.Add(mon);
+                                        });
+                                    }
+
+                                    //Debug.Log("mon_count2 = " + regular_monsters.Count);
+
+                                    int regular_id = MonsterRandomizer.rand.Next(0, regular_monsters.Count);
+
+                                    //Debug.Log("regular_id = " + regular_id);
+
+                                    monster = regular_monsters_2[regular_id];
+                                    if (mapData.SceneName == current_area)
+                                    {
+                                        regular_monsters2.Add(regular_monsters_2[regular_id].gameObject);
+                                    }
+
+                                    regular_monsters_used.Add(monster.gameObject);
+
+                                    regular_monsters.RemoveAt(regular_id);
+
+                                    regular_monsters_used_2.Add(monster);
+
+                                    regular_monsters_2.RemoveAt(regular_id);
+                                });
+                            }
+                        });
+                    });
+
+
+
+
+
+
+
+
+                    var old_reg = new List<GameObject>();
+                    var old_champ = new List<GameObject>();
+                    var old_champ_mon = new List<Monster>();
+
+
+
+
+
+                    GameObject[] monsters = new GameObject[monster_count];
+
+                    for ( int i = 0; i < monster_count; i++)
+                    {
+                        Debug.Log("Monster count = "+ champion_monsters2.Count);
+                        Debug.Log("Monster count 2 = " + regular_monsters2.Count);
+                        if (!champion_monsters2.Any())
+                        {
+                            old_champ.ForEach(mon =>
+                            {
+                                champion_monsters2.Add(mon);
+                            });
+                            old_champ_mon.ForEach(mon =>
+                            {
+                                champion_monsters2_mon.Add(mon);
+                            });
+                        }
+
+                        if (!regular_monsters2.Any())
+                        {
+                            old_reg.ForEach(mon =>
+                            {
+                                regular_monsters2.Add(mon);
+                            });
+                        }
+
+                        old_champ = new List<GameObject>();
+                        old_reg = new List<GameObject>();
+
+                        var previous_monster = __result.Monster[i].GetComponent<Monster>();
+
+                        Debug.Log("Previous monster = " + previous_monster);
+
+                        var is_champion = __result.Monster[i].GetComponent<SkillManager>().GetChampionPassive() != null && __instance.IsChampion;//CombatController.Instance.CurrentEncounter.IsChampion; // && previous_monster.SkillManager.GetChampionPassive() != null && !previous_monster.BelongsToPlayer;
+
+                        Debug.Log("Is this a champion? "+is_champion);
+
+                        if (champion_monsters2.Any() && is_champion || regular_monsters2.Any())
+                        {
+
+                            if (is_champion)
+                            {
+                                var champion_index = MonsterRandomizer.rand.Next(0, champion_monsters2.Count);
+
+                                Debug.Log("Count: " + champion_monsters2.Count);
+                                Debug.Log("ID: " + champion_index);
+
+                                var champion_monster = champion_monsters2[champion_index];
+                                Debug.Log("Spawned monster: " + champion_monster.name);
+
+
+                                var old_monster = __result.Monster[i].GetComponent<Monster>().OriginalMonsterName;
+
+
+                                Debug.Log("Old monster name = " + old_monster);
+
+
+                                if (!MonsterRandomizer.championDict.ContainsKey(champion_monster.GetComponent<Monster>().OriginalMonsterName))
+                                {
+                                    MonsterRandomizer.championDict.Add(champion_monster.GetComponent<Monster>().OriginalMonsterName, __result.Monster[i].GetComponent<Monster>());
+                                }
+
+                                if (dangerous_mons.Contains(old_monster) || MonsterRandomizer.randomizeChampions.Value == false)
+                                {
+                                    monsters[i] = __result.Monster[i];
+                                }
+                                else
+                                {
+                                    monsters[i] = champion_monster;
+                                }
+
+                                old_champ.Add(champion_monster);
+                                champion_monsters2.RemoveAt(champion_index);
+
+                            }
+                            else
+                            {
+                                var regular_index = MonsterRandomizer.rand.Next(0, regular_monsters2.Count);
+                                Debug.Log("ID: " + regular_index);
+
+                                var regular_monster = regular_monsters2[regular_index];
+
+                                Debug.Log("Spawned monster: " + regular_monster.name);
+                                //Debug.Log("Spawned monster: " + regular_monster.name);
+
+                                if(MonsterRandomizer.randomizeMonsters.Value == false)
+                                {
+                                    monsters[i] = __result.Monster[i];
+                                }
+                                else
+                                {
+                                    monsters[i] = regular_monster;
+                                }
+
+
+                                old_reg.Add(regular_monster);
+                                regular_monsters2.RemoveAt(regular_index);
+
+                            }
+                        }
+
+                    }
+
+                    __result.Monster = monsters;
+
+
+                }
+            
+        }*/
+
+    [BepInPlugin("evaisa." + modname, modname, version)]
+    public class IlLine : BaseUnityPlugin
+    {
+        internal const string modname = nameof(IlLine);
+        internal const string version = "1.0.0";
+
+        IlLine()
+        {
+            new ILHook(typeof(StackTrace).GetMethod("AddFrames", BindingFlags.Instance | BindingFlags.NonPublic), IlHook);
+        }
+
+        private void IlHook(ILContext il)
+        {
+            var cursor = new ILCursor(il);
+            cursor.GotoNext(
+                x => x.MatchCallvirt(typeof(StackFrame).GetMethod("GetFileLineNumber", BindingFlags.Instance | BindingFlags.Public))
+            );
+
+            cursor.RemoveRange(2);
+            cursor.EmitDelegate<Func<StackFrame, string>>(GetLineOrIL);
+        }
+
+        private static string GetLineOrIL(StackFrame instace)
+        {
+            var line = instace.GetFileLineNumber();
+            if (line == StackFrame.OFFSET_UNKNOWN || line == 0)
+            {
+                return "IL_" + instace.GetILOffset().ToString("X4");
+            }
+
+            return line.ToString();
+        }
+    }
+}
