@@ -24,7 +24,7 @@ namespace MonsterSanctuaryRandomizer
     {
         public const string ModGUID = "evaisa.monsterrandomizer";
         public const string ModName = "Monster Randomizer";
-        public const string ModVersion = "0.3.1";
+        public const string ModVersion = "0.3.4";
 
         public static ConfigEntry<bool> randomizeMonsters;
         public static ConfigEntry<bool> randomizeChampions;
@@ -107,7 +107,8 @@ namespace MonsterSanctuaryRandomizer
             On.PlayerController.LoadGame += PlayerController_LoadGame;
             On.GameController.InitPlayerStartSetup += GameController_InitPlayerStartSetup;
             On.MonsterEncounter.DetermineEnemy += MonsterEncounter_DetermineEnemy;
-            On.ProgressManager.ChampionKilled += ProgressManager_ChampionKilled;
+            //On.ProgressManager.ChampionKilled += ProgressManager_ChampionKilled;
+            On.ProgressManager.ChampionKilled += ProgressManager_ChampionKilled; ;
             On.BaseCutscene.Update += BaseCutscene_Update;
             On.Chest.Start += Chest_Start;
           //  On.SkillManager.LoadSkillData += SkillManager_LoadSkillData;
@@ -492,7 +493,7 @@ namespace MonsterSanctuaryRandomizer
 
 
 
-        private void ProgressManager_ChampionKilled(On.ProgressManager.orig_ChampionKilled orig, ProgressManager self, Monster champion, int score, int points)
+        private void ProgressManager_ChampionKilled(On.ProgressManager.orig_ChampionKilled orig, ProgressManager self, Monster champion, int score, int points, EDifficulty difficulty)
         {
             var champion_name = champion.OriginalMonsterName;
 
@@ -511,7 +512,7 @@ namespace MonsterSanctuaryRandomizer
 
 
 
-            orig(self, champion, score, points);
+            orig(self, champion, score, points, difficulty);
         }
 
         private MonsterEncounter.EncounterConfig MonsterEncounter_DetermineEnemy(On.MonsterEncounter.orig_DetermineEnemy orig, MonsterEncounter self)
@@ -790,13 +791,13 @@ namespace MonsterSanctuaryRandomizer
             orig(self);
         }
 
-        private void PlayerController_LoadGame(On.PlayerController.orig_LoadGame orig, PlayerController self, SaveGameData saveGameData)
+        private void PlayerController_LoadGame(On.PlayerController.orig_LoadGame orig, PlayerController self, SaveGameData saveGameData, bool newGamePlusSetup)
         {
             self.name = saveGameData.PlayerName;
 
 
             HandleReferenceModification(saveGameData.PlayerName);
-            orig(self, saveGameData);
+            orig(self, saveGameData, newGamePlusSetup);
         }
 
 
