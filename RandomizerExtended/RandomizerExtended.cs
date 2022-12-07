@@ -508,7 +508,20 @@ namespace RandomizerExtended
 
                     var skill_manager = monster.GetComponent<SkillManager>();
 
+                    var base_weaknesses = skill_manager.BaseSkills.FindAll(skill => referenceables["skills.weakness"].Contains(skill));
+                    var base_resistances = skill_manager.BaseSkills.FindAll(skill => referenceables["skills.resistance"].Contains(skill));
+
                     skill_manager.BaseSkills = new List<GameObject>();
+
+                    if (!randomizeResistanceWeakness.Value)
+                    {
+                        base_weaknesses.ForEach(skill =>
+                            skill_manager.BaseSkills.Add(skill)
+                            );
+                        base_resistances.ForEach(skill =>
+                            skill_manager.BaseSkills.Add(skill)
+                            );
+                    }
 
                     for (int i = 0; i < tree_count; i++)
                     {
