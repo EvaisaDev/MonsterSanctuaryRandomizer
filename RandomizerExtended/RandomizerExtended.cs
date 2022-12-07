@@ -513,16 +513,6 @@ namespace RandomizerExtended
 
                     skill_manager.BaseSkills = new List<GameObject>();
 
-                    if (!randomizeResistanceWeakness.Value)
-                    {
-                        base_weaknesses.ForEach(skill =>
-                            skill_manager.BaseSkills.Add(skill)
-                            );
-                        base_resistances.ForEach(skill =>
-                            skill_manager.BaseSkills.Add(skill)
-                            );
-                    }
-
                     for (int i = 0; i < tree_count; i++)
                     {
 
@@ -560,6 +550,17 @@ namespace RandomizerExtended
 
                         CopyComponent(skill_tree, monster);
                     }
+
+                    if (!randomizeResistanceWeakness.Value)
+                    {
+                        base_weaknesses.ForEach(skill =>
+                            skill_manager.BaseSkills.Add(skill)
+                            );
+                        base_resistances.ForEach(skill =>
+                            skill_manager.BaseSkills.Add(skill)
+                            );
+                    }
+
                 }
             }
         }
